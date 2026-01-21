@@ -110,13 +110,34 @@ class ISOBuilder:
                     print(f"\n⚠ Warning: Could not clean up {self.work_dir}: {e}")
     
     def _check_requirements(self):
-        """Check if required tools are available"""
+        """Check if required tools are available and user has proper permissions"""
         required_tools = ['debootstrap', 'xorriso', 'mksquashfs']
+        missing_tools = []
         
         for tool in required_tools:
             if shutil.which(tool) is None:
-                print(f"⚠ Missing required tool: {tool}")
-                return False
+                missing_tools.append(tool)
+        
+        if missing_tools:
+            print(f"⚠ Missing required tools: {', '.join(missing_tools)}")
+            print("\nTo install on Ubuntu/Debian:")
+            print("  sudo apt-get update")
+            print("  sudo apt-get install debootstrap xorriso squashfs-tools")
+            print("\nTo install on Fedora:")
+            print("  sudo dnf install debootstrap xorriso squashfs-tools")
+            print("\nTo install on Arch Linux:")
+            print("  sudo pacman -S debootstrap libisoburn squashfs-tools")
+            return False
+        
+        # Check for root privileges (required for debootstrap)
+        if os.geteuid() != 0:
+            print("⚠ Root privileges required!")
+            print("\nBuilding a full Debian ISO requires root/sudo privileges.")
+            print("Please run this application with sudo:")
+            print("  sudo python3 debspin_gui.py")
+            print("\nOr run the launcher script with sudo:")
+            print("  sudo ./launch_debspin.sh")
+            return False
         
         return True
     
@@ -466,7 +487,8 @@ ISO metadata: See debspin_metadata.json in the archive
             ]
             
             print(f"Running: {' '.join(cmd)}")
-            print("This may take several minutes...")
+            print("This may take several minutes depending on your internet connection...")
+            print("(Downloading ~200MB of packages from Debian mirrors)")
             
             result = subprocess.run(
                 cmd,
@@ -476,14 +498,38 @@ ISO metadata: See debspin_metadata.json in the archive
             )
             
             if result.returncode != 0:
-                print(f"Debootstrap error: {result.stderr}")
+                print(f"\n❌ Debootstrap failed!")
+                print("\nError output:")
+                print("-" * 40)
+                # Show both stdout and stderr for debugging (safely handle None/empty)
+                stdout = result.stdout or ''
+                stderr = result.stderr or ''
+                if stdout:
+                    print(stdout[-2000:] if len(stdout) > 2000 else stdout)
+                if stderr:
+                    print(stderr[-2000:] if len(stderr) > 2000 else stderr)
+                print("-" * 40)
+                print("\nCommon causes of debootstrap failures:")
+                print("  1. No internet connection or firewall blocking access")
+                print("  2. Insufficient disk space (need at least 2GB free)")
+                print("  3. DNS resolution issues (try: ping deb.debian.org)")
+                print("  4. Permission issues (make sure to run with sudo)")
                 return False
             
             print("✓ Base system bootstrapped successfully")
             return True
             
         except subprocess.TimeoutExpired:
-            print("❌ Debootstrap timed out")
+            print("❌ Debootstrap timed out after 30 minutes")
+            print("\nTroubleshooting steps:")
+            print("  1. Check your internet connection: ping deb.debian.org")
+            print("  2. Try a different mirror (edit iso_builder.py)")
+            print("  3. Check if download is blocked by firewall")
+            print("  4. Ensure you have at least 2GB free disk space")
+            return False
+        except FileNotFoundError:
+            print("❌ debootstrap command not found!")
+            print("Please install it: sudo apt-get install debootstrap")
             return False
         except Exception as e:
             print(f"❌ Debootstrap error: {e}")
