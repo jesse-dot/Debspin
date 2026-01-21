@@ -12,6 +12,10 @@ import json
 import re
 from pathlib import Path
 
+# Branding file naming constants
+BRANDING_LOGO_BASENAME = 'debspin-logo'
+BRANDING_BACKGROUND_BASENAME = 'debspin-background'
+
 
 def sanitize_filename(text):
     """
@@ -180,21 +184,60 @@ class ISOBuilder:
                         'install: debootstrap, xorriso, squashfs-tools, and live-build'
             }
             
+            # Add logo information if provided
+            if 'logo_path' in self.config and self.config['logo_path']:
+                metadata['has_logo'] = True
+                metadata['logo_filename'] = os.path.basename(self.config['logo_path'])
+            
+            # Add background information if provided
+            if 'background_path' in self.config and self.config['background_path']:
+                metadata['has_background'] = True
+                metadata['background_filename'] = os.path.basename(self.config['background_path'])
+            
             metadata_path = os.path.join(iso_dir, 'debspin_metadata.json')
             with open(metadata_path, 'w') as f:
                 json.dump(metadata, f, indent=2)
             
+            # Copy logo file if provided
+            if 'logo_path' in self.config and self.config['logo_path']:
+                logo_src = self.config['logo_path']
+                if os.path.exists(logo_src):
+                    branding_dir = os.path.join(iso_dir, 'branding')
+                    os.makedirs(branding_dir, exist_ok=True)
+                    logo_dst = os.path.join(branding_dir, os.path.basename(logo_src))
+                    shutil.copy2(logo_src, logo_dst)
+                    print(f"✓ Logo copied to ISO: {os.path.basename(logo_src)}")
+            
+            # Copy background file if provided
+            if 'background_path' in self.config and self.config['background_path']:
+                bg_src = self.config['background_path']
+                if os.path.exists(bg_src):
+                    branding_dir = os.path.join(iso_dir, 'branding')
+                    os.makedirs(branding_dir, exist_ok=True)
+                    bg_dst = os.path.join(branding_dir, os.path.basename(bg_src))
+                    shutil.copy2(bg_src, bg_dst)
+                    print(f"✓ Background copied to ISO: {os.path.basename(bg_src)}")
+            
             self._report_progress(50, "Creating README file...")
             # Create a README
             readme_path = os.path.join(iso_dir, 'README.txt')
-            with open(readme_path, 'w') as f:
-                f.write(f"""
+            readme_content = f"""
 {self.config['os_name']} - Custom Debian Spinoff
 Version: {self.config['version_code']}
 
 This ISO contains a custom Debian distribution with:
 - Desktop Manager: {self.config['desktop_manager']}
-- Custom packages: {len(self.config['packages'])} packages included
+- Custom packages: {len(self.config['packages'])} packages included"""
+            
+            # Add logo information to README if present
+            if 'logo_path' in self.config and self.config['logo_path']:
+                readme_content += f"\n- Custom Logo: {os.path.basename(self.config['logo_path'])}"
+            
+            # Add background information to README if present
+            if 'background_path' in self.config and self.config['background_path']:
+                readme_content += f"\n- Custom Background: {os.path.basename(self.config['background_path'])}"
+            
+            readme_content += """
 
 Features:
 ✓ Live Boot capability
@@ -215,7 +258,10 @@ To use this ISO:
    - Install to your computer
 
 Created with Debspin - Debian Spinoff Creator
-""")
+"""
+            
+            with open(readme_path, 'w') as f:
+                f.write(readme_content)
             
             self._report_progress(65, "Creating boot configuration...")
             # Create boot configuration stub
@@ -730,6 +776,25 @@ ISO metadata: See debspin_metadata.json in the archive
                 f.write(f'VERSION="{version_safe}"\n')
                 f.write(f'ID={sanitize_filename(self.config["os_name"]).lower()}\n')
                 f.write('ID_LIKE=debian\n')
+            
+            # Copy logo and background files if provided
+            if 'logo_path' in self.config and self.config['logo_path']:
+                logo_src = self.config['logo_path']
+                if os.path.exists(logo_src):
+                    branding_dir = os.path.join(rootfs_dir, 'usr', 'share', 'pixmaps')
+                    os.makedirs(branding_dir, exist_ok=True)
+                    logo_dst = os.path.join(branding_dir, BRANDING_LOGO_BASENAME + os.path.splitext(logo_src)[1])
+                    shutil.copy2(logo_src, logo_dst)
+                    print(f"✓ Logo copied to rootfs: {os.path.basename(logo_dst)}")
+            
+            if 'background_path' in self.config and self.config['background_path']:
+                bg_src = self.config['background_path']
+                if os.path.exists(bg_src):
+                    wallpaper_dir = os.path.join(rootfs_dir, 'usr', 'share', 'backgrounds')
+                    os.makedirs(wallpaper_dir, exist_ok=True)
+                    bg_dst = os.path.join(wallpaper_dir, BRANDING_BACKGROUND_BASENAME + os.path.splitext(bg_src)[1])
+                    shutil.copy2(bg_src, bg_dst)
+                    print(f"✓ Background copied to rootfs: {os.path.basename(bg_dst)}")
             
             print("✓ Live system configured")
             

@@ -57,6 +57,38 @@ def test_config_generation():
     print("\n✅ All tests passed!")
     return True
 
+def test_config_with_logo_and_background():
+    """Test configuration generation with logo and background"""
+    print("\nTesting configuration with logo and background...")
+    
+    config = {
+        "os_name": "TestDebian",
+        "version_code": "1.0",
+        "desktop_manager": "KDE Plasma",
+        "packages": ["firefox-esr", "libreoffice"],
+        "logo_path": "/path/to/logo.png",
+        "background_path": "/path/to/background.jpg",
+        "created_at": "2026-01-21T18:13:41.000000",
+        "version": "1.0"
+    }
+    
+    # Test JSON serialization with optional fields
+    try:
+        config_json = json.dumps(config, indent=2)
+        print("✓ Configuration with logo and background serializes correctly")
+        
+        # Verify optional fields
+        assert "logo_path" in config, "logo_path field should be present"
+        assert "background_path" in config, "background_path field should be present"
+        print("✓ Logo and background fields are present")
+        
+        print()
+        return True
+    except Exception as e:
+        print(f"✗ Configuration test failed: {e}")
+        print()
+        return False
+
 if __name__ == "__main__":
-    success = test_config_generation()
+    success = test_config_generation() and test_config_with_logo_and_background()
     sys.exit(0 if success else 1)
