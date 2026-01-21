@@ -40,21 +40,29 @@ If tkinter is not available on your system, install it using your package manage
 
 For creating fully bootable ISOs (recommended for production use), install these additional tools:
 
-- **Ubuntu/Debian**: `sudo apt-get install debootstrap xorriso squashfs-tools live-build`
-- **Fedora**: `sudo dnf install debootstrap xorriso squashfs-tools live-build`
+- **Ubuntu/Debian**: `sudo apt-get install debootstrap xorriso squashfs-tools`
+- **Fedora**: `sudo dnf install debootstrap xorriso squashfs-tools`
 - **Arch Linux**: `sudo pacman -S debootstrap libisoburn squashfs-tools`
 
-**Note**: Without these tools, Debspin will create a demonstration ISO with all metadata and configuration files, but it won't be fully bootable. The demonstration ISO still contains all the necessary configuration to show what would be included in a full build.
+**Important**: Building a full bootable ISO requires **root/sudo privileges** because debootstrap needs to perform chroot operations and mount filesystems.
+
+**Note**: Without these tools or root privileges, Debspin will create a demonstration ISO with all metadata and configuration files, but it won't be fully bootable. The demonstration ISO still contains all the necessary configuration to show what would be included in a full build.
 
 ## Usage
 
-### Method 1: Using the launcher script
+### Method 1: Using the launcher script (for full ISO building)
 
 ```bash
-./launch_debspin.sh
+sudo ./launch_debspin.sh
 ```
 
-### Method 2: Direct Python execution
+### Method 2: Direct Python execution (for full ISO building)
+
+```bash
+sudo python3 debspin_gui.py
+```
+
+### Method 3: Without sudo (creates demonstration ISO only)
 
 ```bash
 python3 debspin_gui.py
