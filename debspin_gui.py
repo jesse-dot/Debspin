@@ -7,7 +7,11 @@ A GUI application for creating custom Debian-based Linux distributions
 import tkinter as tk
 from tkinter import ttk, scrolledtext, messagebox, filedialog
 import json
+import os
+import subprocess
+import threading
 from datetime import datetime
+from iso_builder import sanitize_filename
 
 
 class DebspinGUI:
@@ -48,6 +52,13 @@ class DebspinGUI:
         self.os_name_entry = ttk.Entry(os_frame, textvariable=self.os_name_var, 
                                        width=40)
         self.os_name_entry.grid(row=0, column=1, sticky=(tk.W, tk.E))
+        
+        ttk.Label(os_frame, text="Version Code:").grid(row=1, column=0, sticky=tk.W, 
+                                                       padx=(0, 10), pady=(5, 0))
+        self.version_var = tk.StringVar(value="1.0")
+        self.version_entry = ttk.Entry(os_frame, textvariable=self.version_var, 
+                                       width=40)
+        self.version_entry.grid(row=1, column=1, sticky=(tk.W, tk.E), pady=(5, 0))
         
         # Desktop Manager section
         de_frame = ttk.LabelFrame(main_container, text="Desktop Environment", 
@@ -129,9 +140,9 @@ htop"""
                                       command=self.preview_config)
         self.preview_btn.grid(row=0, column=0, padx=5, sticky=(tk.W, tk.E))
         
-        self.save_btn = ttk.Button(button_frame, text="Save Configuration", 
-                                   command=self.save_config)
-        self.save_btn.grid(row=0, column=1, padx=5, sticky=(tk.W, tk.E))
+        self.build_btn = ttk.Button(button_frame, text="Build ISO", 
+                                   command=self.build_iso)
+        self.build_btn.grid(row=0, column=1, padx=5, sticky=(tk.W, tk.E))
         
         self.about_btn = ttk.Button(button_frame, text="About", 
                                     command=self.show_about)
@@ -151,6 +162,7 @@ htop"""
         """Generate the spinoff configuration"""
         config = {
             "os_name": self.os_name_var.get(),
+            "version_code": self.version_var.get(),
             "desktop_manager": self.desktop_var.get(),
             "packages": self.get_packages_list(),
             "created_at": datetime.now().isoformat(),
@@ -168,8 +180,96 @@ htop"""
         self.config_text.insert("1.0", config_json)
         self.config_text.config(state=tk.DISABLED)
     
+    def get_desktop_packages(self, desktop_manager):
+        """Map desktop manager to required packages"""
+        desktop_packages = {
+            "KDE Plasma": ["kde-plasma-desktop", "sddm"],
+            "GNOME": ["gnome-core", "gdm3"],
+            "XFCE": ["xfce4", "xfce4-goodies", "lightdm"],
+            "LXDE": ["lxde", "lightdm"],
+            "Cinnamon": ["cinnamon-desktop-environment", "lightdm"],
+            "MATE": ["mate-desktop-environment", "lightdm"],
+            "Budgie": ["budgie-desktop", "lightdm"],
+            "i3": ["i3", "lightdm"],
+            "None (Server/Minimal)": []
+        }
+        return desktop_packages.get(desktop_manager, [])
+    
+    def build_iso(self):
+        """Build the Debian ISO"""
+        config = self.generate_config()
+        
+        # Validate inputs
+        if not config["os_name"]:
+            messagebox.showerror("Error", "Please enter an OS name")
+            return
+        
+        if not config["version_code"]:
+            messagebox.showerror("Error", "Please enter a version code")
+            return
+        
+        # Ask for save location
+        os_name_safe = sanitize_filename(config['os_name'])
+        version_safe = sanitize_filename(config['version_code'])
+        default_filename = f"{os_name_safe}-{version_safe}.iso"
+        
+        filepath = filedialog.asksaveasfilename(
+            defaultextension=".iso",
+            initialfile=default_filename,
+            filetypes=[("ISO files", "*.iso"), ("All files", "*.*")]
+        )
+        
+        if not filepath:
+            return
+        
+        # Disable the build button during build
+        self.build_btn.config(state=tk.DISABLED, text="Building...")
+        self.root.update()
+        
+        # Build ISO in a separate thread to avoid freezing the GUI
+        build_thread = threading.Thread(
+            target=self._build_iso_thread,
+            args=(config, filepath)
+        )
+        build_thread.daemon = True
+        build_thread.start()
+    
+    def _build_iso_thread(self, config, output_path):
+        """Build the ISO in a separate thread"""
+        try:
+            # Create the ISO builder and build
+            from iso_builder import ISOBuilder
+            builder = ISOBuilder(config, output_path)
+            success = builder.build()
+            
+            if success:
+                self.root.after(0, lambda: messagebox.showinfo(
+                    "Success", 
+                    f"ISO created successfully!\n\nFile: {output_path}\n\n"
+                    f"You can now use this ISO to:\n"
+                    f"• Create a bootable USB drive\n"
+                    f"• Boot in a virtual machine\n"
+                    f"• Install {config['os_name']} on a computer"
+                ))
+            else:
+                self.root.after(0, lambda: messagebox.showerror(
+                    "Error",
+                    "Failed to build ISO. Check console for details."
+                ))
+        except Exception as e:
+            self.root.after(0, lambda: messagebox.showerror(
+                "Error", 
+                f"Failed to build ISO:\n{str(e)}"
+            ))
+        finally:
+            # Re-enable the build button
+            self.root.after(0, lambda: self.build_btn.config(
+                state=tk.NORMAL, 
+                text="Build ISO"
+            ))
+    
     def save_config(self):
-        """Save the configuration to a file"""
+        """Save the configuration to a file (legacy method)"""
         config = self.generate_config()
         
         # Validate inputs
