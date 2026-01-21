@@ -959,7 +959,10 @@ LABEL install
 
 
 if __name__ == "__main__":
-    # Test the ISO builder
+    # Test the ISO builder with progress callback
+    def print_progress(percentage, message):
+        print(f"Progress: {percentage}% - {message}")
+    
     test_config = {
         "os_name": "TestDebian",
         "version_code": "1.0",
@@ -968,6 +971,6 @@ if __name__ == "__main__":
         "created_at": "2026-01-21T18:00:00"
     }
     
-    builder = ISOBuilder(test_config, "/tmp/test-debian-1.0.iso")
+    builder = ISOBuilder(test_config, "/tmp/test-debian-1.0.iso", print_progress)
     success = builder.build()
     print(f"\nBuild {'succeeded' if success else 'failed'}")

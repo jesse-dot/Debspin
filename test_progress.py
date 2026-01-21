@@ -29,7 +29,7 @@ def test_progress_callback():
         "version_code": "1.0",
         "desktop_manager": "XFCE",
         "packages": ["vim", "git"],
-        "created_at": "2024-01-21T18:00:00"
+        "created_at": "2026-01-21T18:00:00"
     }
     
     # Create output path using tempfile for cross-platform compatibility
