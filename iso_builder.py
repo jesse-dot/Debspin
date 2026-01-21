@@ -12,6 +12,10 @@ import json
 import re
 from pathlib import Path
 
+# Branding file naming constants
+BRANDING_LOGO_BASENAME = 'debspin-logo'
+BRANDING_BACKGROUND_BASENAME = 'debspin-background'
+
 
 def sanitize_filename(text):
     """
@@ -779,7 +783,7 @@ ISO metadata: See debspin_metadata.json in the archive
                 if os.path.exists(logo_src):
                     branding_dir = os.path.join(rootfs_dir, 'usr', 'share', 'pixmaps')
                     os.makedirs(branding_dir, exist_ok=True)
-                    logo_dst = os.path.join(branding_dir, 'debspin-logo' + os.path.splitext(logo_src)[1])
+                    logo_dst = os.path.join(branding_dir, BRANDING_LOGO_BASENAME + os.path.splitext(logo_src)[1])
                     shutil.copy2(logo_src, logo_dst)
                     print(f"✓ Logo copied to rootfs: {os.path.basename(logo_dst)}")
             
@@ -788,7 +792,7 @@ ISO metadata: See debspin_metadata.json in the archive
                 if os.path.exists(bg_src):
                     wallpaper_dir = os.path.join(rootfs_dir, 'usr', 'share', 'backgrounds')
                     os.makedirs(wallpaper_dir, exist_ok=True)
-                    bg_dst = os.path.join(wallpaper_dir, 'debspin-background' + os.path.splitext(bg_src)[1])
+                    bg_dst = os.path.join(wallpaper_dir, BRANDING_BACKGROUND_BASENAME + os.path.splitext(bg_src)[1])
                     shutil.copy2(bg_src, bg_dst)
                     print(f"✓ Background copied to rootfs: {os.path.basename(bg_dst)}")
             
