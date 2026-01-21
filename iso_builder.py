@@ -55,17 +55,24 @@ def sanitize_grub_string(text):
 class ISOBuilder:
     """Builds a custom Debian ISO with live boot and installation capabilities"""
     
-    def __init__(self, config, output_path):
+    def __init__(self, config, output_path, progress_callback=None):
         """
         Initialize the ISO builder
         
         Args:
             config: Configuration dictionary with os_name, desktop_manager, packages, etc.
             output_path: Path where the ISO file will be saved
+            progress_callback: Optional callback function(percentage, message) for progress updates
         """
         self.config = config
         self.output_path = output_path
         self.work_dir = None
+        self.progress_callback = progress_callback
+        
+    def _report_progress(self, percentage, message):
+        """Report progress to the callback if available"""
+        if self.progress_callback:
+            self.progress_callback(percentage, message)
         
     def build(self):
         """
@@ -75,6 +82,7 @@ class ISOBuilder:
             bool: True if successful, False otherwise
         """
         try:
+            self._report_progress(0, "Starting ISO build...")
             print(f"\n{'='*60}")
             print(f"Building Debian ISO: {self.config['os_name']}")
             print(f"Version: {self.config['version_code']}")
@@ -83,10 +91,12 @@ class ISOBuilder:
             print(f"{'='*60}\n")
             
             # Create temporary working directory
+            self._report_progress(5, "Creating temporary working directory...")
             self.work_dir = tempfile.mkdtemp(prefix='debspin_build_')
             print(f"Working directory: {self.work_dir}")
             
             # Check for required tools
+            self._report_progress(10, "Checking system requirements...")
             if not self._check_requirements():
                 print("\n⚠ WARNING: Required tools not found!")
                 print("Creating a minimal ISO stub for demonstration purposes.")
@@ -147,10 +157,12 @@ class ISOBuilder:
         This is used when live-build tools are not available
         """
         try:
+            self._report_progress(15, "Creating ISO directory structure...")
             # Create ISO directory structure
             iso_dir = os.path.join(self.work_dir, 'iso')
             os.makedirs(iso_dir, exist_ok=True)
             
+            self._report_progress(30, "Creating metadata file...")
             # Create metadata file
             metadata = {
                 'iso_type': 'Debian Custom Spinoff',
@@ -170,6 +182,7 @@ class ISOBuilder:
             with open(metadata_path, 'w') as f:
                 json.dump(metadata, f, indent=2)
             
+            self._report_progress(50, "Creating README file...")
             # Create a README
             readme_path = os.path.join(iso_dir, 'README.txt')
             with open(readme_path, 'w') as f:
@@ -202,6 +215,7 @@ To use this ISO:
 Created with Debspin - Debian Spinoff Creator
 """)
             
+            self._report_progress(65, "Creating boot configuration...")
             # Create boot configuration stub
             boot_dir = os.path.join(iso_dir, 'boot')
             os.makedirs(boot_dir, exist_ok=True)
@@ -228,6 +242,7 @@ menuentry "{os_name_safe} {version_safe} - Install" {{
 }}
 """)
             
+            self._report_progress(75, "Creating package list...")
             # Create package list
             packages_path = os.path.join(iso_dir, 'packages.list')
             with open(packages_path, 'w') as f:
@@ -240,6 +255,7 @@ menuentry "{os_name_safe} {version_safe} - Install" {{
                 for pkg in self.config['packages']:
                     f.write(f"{pkg}\n")
             
+            self._report_progress(85, "Creating ISO file...")
             # Create the ISO using xorriso if available, otherwise create a tar archive
             if shutil.which('genisoimage') or shutil.which('xorriso'):
                 return self._create_iso_with_xorriso(iso_dir)
@@ -292,6 +308,7 @@ menuentry "{os_name_safe} {version_safe} - Install" {{
                 print(f"\n✓ ISO created successfully: {self.output_path}")
                 file_size = os.path.getsize(self.output_path) / (1024 * 1024)
                 print(f"✓ Size: {file_size:.2f} MB")
+                self._report_progress(100, f"ISO created successfully ({file_size:.2f} MB)")
                 return True
             else:
                 print(f"\n❌ ISO creation failed:")
@@ -305,6 +322,7 @@ menuentry "{os_name_safe} {version_safe} - Install" {{
     def _create_tar_archive(self, iso_dir):
         """Fallback: create a tar.gz archive instead of ISO"""
         try:
+            self._report_progress(90, "Creating tar.gz archive...")
             # Change output path from .iso to .tar.gz
             tar_path = self.output_path.replace('.iso', '.tar.gz')
             
@@ -319,6 +337,7 @@ menuentry "{os_name_safe} {version_safe} - Install" {{
             file_size = os.path.getsize(tar_path) / (1024 * 1024)
             print(f"✓ Size: {file_size:.2f} MB")
             
+            self._report_progress(95, "Creating info file...")
             # Create a text file at the ISO path explaining the situation
             info_text = f"""Debspin ISO Builder Output
 
@@ -352,6 +371,7 @@ ISO metadata: See debspin_metadata.json in the archive
             print(f"✓ Created info file: {self.output_path}")
             print(f"  (Contains path to tar.gz archive)")
             
+            self._report_progress(100, f"Archive created successfully ({file_size:.2f} MB)")
             return True
             
         except Exception as e:
@@ -420,6 +440,7 @@ ISO metadata: See debspin_metadata.json in the archive
             print("\n📦 Building bootable Debian ISO...")
             
             # Create directory structure
+            self._report_progress(15, "Creating directory structure...")
             rootfs_dir = os.path.join(self.work_dir, 'rootfs')
             iso_dir = os.path.join(self.work_dir, 'iso')
             squashfs_dir = os.path.join(iso_dir, 'live')
@@ -432,21 +453,25 @@ ISO metadata: See debspin_metadata.json in the archive
             
             # Step 1: Bootstrap base Debian system
             print("\n📥 Step 1/6: Bootstrapping Debian base system...")
+            self._report_progress(20, "Step 1/6: Bootstrapping Debian base system...")
             if not self._run_debootstrap(rootfs_dir):
                 print("❌ Debootstrap failed, falling back to stub ISO")
                 return self._create_stub_iso()
             
             # Step 2: Install desktop environment and packages
             print("\n📦 Step 2/6: Installing desktop environment and packages...")
+            self._report_progress(40, "Step 2/6: Installing desktop environment and packages...")
             if not self._install_packages(rootfs_dir):
                 print("⚠ Some packages may have failed to install")
             
             # Step 3: Configure the live system
             print("\n⚙ Step 3/6: Configuring live system...")
+            self._report_progress(60, "Step 3/6: Configuring live system...")
             self._configure_live_system(rootfs_dir)
             
             # Step 4: Create squashfs filesystem
             print("\n🗜 Step 4/6: Creating squashfs filesystem...")
+            self._report_progress(70, "Step 4/6: Creating squashfs filesystem...")
             squashfs_path = os.path.join(squashfs_dir, 'filesystem.squashfs')
             if not self._create_squashfs(rootfs_dir, squashfs_path):
                 print("❌ Squashfs creation failed, falling back to stub ISO")
@@ -454,10 +479,12 @@ ISO metadata: See debspin_metadata.json in the archive
             
             # Step 5: Setup boot configuration
             print("\n🔧 Step 5/6: Setting up boot configuration...")
+            self._report_progress(85, "Step 5/6: Setting up boot configuration...")
             self._setup_boot(rootfs_dir, iso_dir, boot_dir, grub_dir, isolinux_dir)
             
             # Step 6: Create the final ISO
             print("\n💿 Step 6/6: Creating bootable ISO...")
+            self._report_progress(90, "Step 6/6: Creating bootable ISO...")
             if self._create_bootable_iso(iso_dir):
                 return True
             else:
@@ -913,6 +940,7 @@ LABEL install
                     file_size_mb = file_size / (1024 * 1024)
                     print(f"\n✓ ISO created successfully: {self.output_path}")
                     print(f"✓ Size: {file_size_mb:.1f} MB")
+                    self._report_progress(100, f"ISO created successfully ({file_size_mb:.1f} MB)")
                     return True
             
             # If we reach here, the ISO was not created properly

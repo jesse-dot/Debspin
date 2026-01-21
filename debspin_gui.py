@@ -148,6 +148,23 @@ htop"""
                                     command=self.show_about)
         self.about_btn.grid(row=0, column=2, padx=5, sticky=(tk.W, tk.E))
         
+        # Progress section (initially hidden)
+        self.progress_frame = ttk.LabelFrame(main_container, text="Build Progress", 
+                                            padding="10")
+        self.progress_frame.grid(row=6, column=0, sticky=(tk.W, tk.E), pady=(10, 0))
+        self.progress_frame.columnconfigure(0, weight=1)
+        self.progress_frame.grid_remove()  # Hide initially
+        
+        # Progress label
+        self.progress_label = ttk.Label(self.progress_frame, text="")
+        self.progress_label.grid(row=0, column=0, sticky=tk.W, pady=(0, 5))
+        
+        # Progress bar
+        self.progress_bar = ttk.Progressbar(self.progress_frame, 
+                                           mode='determinate', 
+                                           length=500)
+        self.progress_bar.grid(row=1, column=0, sticky=(tk.W, tk.E))
+        
         # Auto-preview on startup
         self.preview_config()
     
@@ -179,6 +196,12 @@ htop"""
         self.config_text.delete("1.0", tk.END)
         self.config_text.insert("1.0", config_json)
         self.config_text.config(state=tk.DISABLED)
+    
+    def update_progress(self, percentage, message):
+        """Update the progress bar and label"""
+        self.progress_bar['value'] = percentage
+        self.progress_label.config(text=f"{percentage}% - {message}")
+        self.root.update_idletasks()
     
     def get_desktop_packages(self, desktop_manager):
         """Map desktop manager to required packages"""
@@ -222,6 +245,11 @@ htop"""
         if not filepath:
             return
         
+        # Show progress frame and reset progress
+        self.progress_frame.grid()
+        self.progress_bar['value'] = 0
+        self.progress_label.config(text="0% - Preparing to build...")
+        
         # Disable the build button during build
         self.build_btn.config(state=tk.DISABLED, text="Building...")
         self.root.update()
@@ -237,9 +265,13 @@ htop"""
     def _build_iso_thread(self, config, output_path):
         """Build the ISO in a separate thread"""
         try:
+            # Create a thread-safe progress callback
+            def progress_callback(percentage, message):
+                self.root.after(0, lambda: self.update_progress(percentage, message))
+            
             # Create the ISO builder and build
             from iso_builder import ISOBuilder
-            builder = ISOBuilder(config, output_path)
+            builder = ISOBuilder(config, output_path, progress_callback)
             success = builder.build()
             
             if success:
