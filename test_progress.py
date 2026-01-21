@@ -32,8 +32,8 @@ def test_progress_callback():
         "created_at": "2026-01-21T18:00:00"
     }
     
-    # Create output path
-    output_path = "/tmp/test-progress.iso"
+    # Create output path using tempfile for cross-platform compatibility
+    output_path = os.path.join(tempfile.gettempdir(), "test-progress.iso")
     
     # Build ISO with progress callback
     builder = ISOBuilder(config, output_path, progress_callback)
