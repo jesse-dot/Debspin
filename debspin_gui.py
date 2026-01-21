@@ -11,6 +11,7 @@ import os
 import subprocess
 import threading
 from datetime import datetime
+from iso_builder import sanitize_filename
 
 
 class DebspinGUI:
@@ -208,8 +209,8 @@ htop"""
             return
         
         # Ask for save location
-        os_name_safe = config['os_name'].replace(' ', '_').lower()
-        version_safe = config['version_code'].replace(' ', '_')
+        os_name_safe = sanitize_filename(config['os_name'])
+        version_safe = sanitize_filename(config['version_code'])
         default_filename = f"{os_name_safe}-{version_safe}.iso"
         
         filepath = filedialog.asksaveasfilename(

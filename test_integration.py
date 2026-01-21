@@ -12,7 +12,7 @@ import tempfile
 # Add the directory to the Python path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from iso_builder import ISOBuilder
+from iso_builder import ISOBuilder, sanitize_filename
 
 def test_iso_creation():
     """Test ISO creation with various configurations"""
@@ -57,9 +57,9 @@ def test_iso_creation():
         print(f"Testing: {test_case['name']}")
         config = test_case['config']
         
-        # Create output path
-        os_name_safe = config['os_name'].lower()
-        version_safe = config['version_code'].replace(' ', '_')
+        # Create output path using shared sanitization
+        os_name_safe = sanitize_filename(config['os_name'])
+        version_safe = sanitize_filename(config['version_code'])
         output_path = f"/tmp/{os_name_safe}-{version_safe}.iso"
         
         # Build ISO

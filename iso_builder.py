@@ -9,7 +9,47 @@ import subprocess
 import tempfile
 import shutil
 import json
+import re
 from pathlib import Path
+
+
+def sanitize_filename(text):
+    """
+    Sanitize a string to make it safe for use in filenames
+    
+    Args:
+        text: The text to sanitize
+        
+    Returns:
+        A sanitized version safe for filenames
+    """
+    # Replace spaces with underscores
+    text = text.replace(' ', '_')
+    # Remove characters that are problematic for filesystems
+    text = re.sub(r'[/\\:*?"<>|]', '', text)
+    # Replace any remaining non-alphanumeric characters (except dots, dashes, underscores)
+    text = re.sub(r'[^a-zA-Z0-9._-]', '-', text)
+    # Remove leading/trailing dots and dashes
+    text = text.strip('.-')
+    return text
+
+
+def sanitize_grub_string(text):
+    """
+    Sanitize a string for safe use in GRUB configuration
+    
+    Args:
+        text: The text to sanitize
+        
+    Returns:
+        A sanitized version safe for GRUB config
+    """
+    # Escape quotes and backslashes
+    text = text.replace('\\', '\\\\')
+    text = text.replace('"', '\\"')
+    # Remove control characters
+    text = re.sub(r'[\x00-\x1f\x7f]', '', text)
+    return text
 
 
 class ISOBuilder:
@@ -147,17 +187,21 @@ Created with Debspin - Debian Spinoff Creator
             
             grub_cfg_path = os.path.join(boot_dir, 'grub.cfg')
             with open(grub_cfg_path, 'w') as f:
+                # Sanitize values for GRUB configuration
+                os_name_safe = sanitize_grub_string(self.config['os_name'])
+                version_safe = sanitize_grub_string(self.config['version_code'])
+                
                 f.write(f"""
-# GRUB Configuration for {self.config['os_name']}
+# GRUB Configuration for {os_name_safe}
 set default=0
 set timeout=10
 
-menuentry "{self.config['os_name']} {self.config['version_code']} - Live" {{
+menuentry "{os_name_safe} {version_safe} - Live" {{
     linux /boot/vmlinuz boot=live
     initrd /boot/initrd.img
 }}
 
-menuentry "{self.config['os_name']} {self.config['version_code']} - Install" {{
+menuentry "{os_name_safe} {version_safe} - Install" {{
     linux /boot/vmlinuz
     initrd /boot/initrd.img
 }}
@@ -254,8 +298,38 @@ menuentry "{self.config['os_name']} {self.config['version_code']} - Install" {{
             file_size = os.path.getsize(tar_path) / (1024 * 1024)
             print(f"✓ Size: {file_size:.2f} MB")
             
-            # Also copy to the original .iso path for consistency
-            shutil.copy2(tar_path, self.output_path)
+            # Create a text file at the ISO path explaining the situation
+            info_text = f"""Debspin ISO Builder Output
+
+The requested ISO file could not be created because required tools
+(debootstrap, xorriso, squashfs-tools) are not installed.
+
+Instead, a tar.gz archive has been created at:
+{tar_path}
+
+This archive contains all the metadata and configuration that would
+be in the ISO:
+- Boot configuration (GRUB)
+- Package lists (desktop environment + user packages)
+- ISO metadata (JSON format)
+- README with usage instructions
+
+To create a real bootable ISO, install the required tools:
+  Ubuntu/Debian: sudo apt-get install debootstrap xorriso squashfs-tools
+  Fedora: sudo dnf install debootstrap xorriso squashfs-tools
+  Arch: sudo pacman -S debootstrap libisoburn squashfs-tools
+
+Then run Debspin again to build the ISO.
+
+Archive location: {tar_path}
+ISO metadata: See debspin_metadata.json in the archive
+"""
+            
+            with open(self.output_path, 'w') as f:
+                f.write(info_text)
+            
+            print(f"✓ Created info file: {self.output_path}")
+            print(f"  (Contains path to tar.gz archive)")
             
             return True
             
