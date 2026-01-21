@@ -1,0 +1,6 @@
+# Debspin GUI Requirements
+# Note: tkinter is included with Python 3 by default on most systems
+# If tkinter is not available, install it using your package manager:
+# - Ubuntu/Debian: sudo apt-get install python3-tk
+# - Fedora: sudo dnf install python3-tkinter
+# - Arch: sudo pacman -S tk
