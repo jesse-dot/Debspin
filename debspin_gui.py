@@ -7,7 +7,6 @@ A GUI application for creating custom Debian-based Linux distributions
 import tkinter as tk
 from tkinter import ttk, scrolledtext, messagebox, filedialog
 import json
-import os
 from datetime import datetime
 
 
