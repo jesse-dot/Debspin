@@ -267,7 +267,8 @@ htop"""
         try:
             # Create a thread-safe progress callback
             def progress_callback(percentage, message):
-                self.root.after(0, lambda: self.update_progress(percentage, message))
+                # Capture by value to avoid race conditions
+                self.root.after(0, lambda p=percentage, m=message: self.update_progress(p, m))
             
             # Create the ISO builder and build
             from iso_builder import ISOBuilder

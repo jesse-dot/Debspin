@@ -62,7 +62,9 @@ class ISOBuilder:
         Args:
             config: Configuration dictionary with os_name, desktop_manager, packages, etc.
             output_path: Path where the ISO file will be saved
-            progress_callback: Optional callback function(percentage, message) for progress updates
+            progress_callback: Optional callback function for progress updates.
+                             Expected signature: callback(percentage: int, message: str)
+                             where percentage is 0-100 and message is a status description.
         """
         self.config = config
         self.output_path = output_path
