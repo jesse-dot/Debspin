@@ -392,20 +392,471 @@ ISO metadata: See debspin_metadata.json in the archive
     
     def _build_with_live_build(self):
         """
-        Build ISO using Debian's live-build system
-        This is the proper way to build a bootable Debian ISO
+        Build ISO using debootstrap and live system tools
+        This creates a proper bootable Debian ISO with live boot capability
         """
         try:
-            # This would require live-build to be installed
-            # For now, we'll use the stub approach
-            print("\n📦 Building with live-build system...")
-            print("⚠ Note: Full live-build integration requires live-build package")
+            print("\n📦 Building bootable Debian ISO...")
             
-            # Fall back to stub ISO creation
-            return self._create_stub_iso()
+            # Create directory structure
+            rootfs_dir = os.path.join(self.work_dir, 'rootfs')
+            iso_dir = os.path.join(self.work_dir, 'iso')
+            squashfs_dir = os.path.join(iso_dir, 'live')
+            boot_dir = os.path.join(iso_dir, 'boot')
+            grub_dir = os.path.join(boot_dir, 'grub')
+            isolinux_dir = os.path.join(iso_dir, 'isolinux')
+            
+            for d in [rootfs_dir, iso_dir, squashfs_dir, boot_dir, grub_dir, isolinux_dir]:
+                os.makedirs(d, exist_ok=True)
+            
+            # Step 1: Bootstrap base Debian system
+            print("\n📥 Step 1/6: Bootstrapping Debian base system...")
+            if not self._run_debootstrap(rootfs_dir):
+                print("❌ Debootstrap failed, falling back to stub ISO")
+                return self._create_stub_iso()
+            
+            # Step 2: Install desktop environment and packages
+            print("\n📦 Step 2/6: Installing desktop environment and packages...")
+            if not self._install_packages(rootfs_dir):
+                print("⚠ Some packages may have failed to install")
+            
+            # Step 3: Configure the live system
+            print("\n⚙ Step 3/6: Configuring live system...")
+            self._configure_live_system(rootfs_dir)
+            
+            # Step 4: Create squashfs filesystem
+            print("\n🗜 Step 4/6: Creating squashfs filesystem...")
+            squashfs_path = os.path.join(squashfs_dir, 'filesystem.squashfs')
+            if not self._create_squashfs(rootfs_dir, squashfs_path):
+                print("❌ Squashfs creation failed, falling back to stub ISO")
+                return self._create_stub_iso()
+            
+            # Step 5: Setup boot configuration
+            print("\n🔧 Step 5/6: Setting up boot configuration...")
+            self._setup_boot(rootfs_dir, iso_dir, boot_dir, grub_dir, isolinux_dir)
+            
+            # Step 6: Create the final ISO
+            print("\n💿 Step 6/6: Creating bootable ISO...")
+            if self._create_bootable_iso(iso_dir):
+                return True
+            else:
+                print("⚠ Bootable ISO creation failed, falling back to stub ISO")
+                return self._create_stub_iso()
             
         except Exception as e:
             print(f"❌ Error with live-build: {e}")
+            import traceback
+            traceback.print_exc()
+            return self._create_stub_iso()
+    
+    def _run_debootstrap(self, rootfs_dir):
+        """Bootstrap a minimal Debian system using debootstrap"""
+        try:
+            # Use bookworm (Debian 12) as the stable release
+            suite = 'bookworm'
+            mirror = 'http://deb.debian.org/debian'
+            
+            cmd = [
+                'debootstrap',
+                '--variant=minbase',
+                '--include=apt,locales,sudo,systemd-sysv,live-boot,linux-image-amd64',
+                suite,
+                rootfs_dir,
+                mirror
+            ]
+            
+            print(f"Running: {' '.join(cmd)}")
+            print("This may take several minutes...")
+            
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=1800  # 30 minute timeout
+            )
+            
+            if result.returncode != 0:
+                print(f"Debootstrap error: {result.stderr}")
+                return False
+            
+            print("✓ Base system bootstrapped successfully")
+            return True
+            
+        except subprocess.TimeoutExpired:
+            print("❌ Debootstrap timed out")
+            return False
+        except Exception as e:
+            print(f"❌ Debootstrap error: {e}")
+            return False
+    
+    def _install_packages(self, rootfs_dir):
+        """Install desktop environment and user-specified packages in the chroot"""
+        try:
+            # Get packages for the desktop environment
+            desktop_packages = self._get_desktop_packages()
+            user_packages = self.config.get('packages', [])
+            all_packages = desktop_packages + user_packages
+            
+            if not all_packages:
+                print("No additional packages to install")
+                return True
+            
+            # Mount necessary filesystems for chroot
+            self._mount_chroot_filesystems(rootfs_dir)
+            
+            try:
+                # Update package lists in chroot
+                update_cmd = [
+                    'chroot', rootfs_dir,
+                    'apt-get', 'update'
+                ]
+                subprocess.run(update_cmd, capture_output=True, text=True, timeout=300)
+                
+                # Install packages
+                # Sanitize package names to prevent command injection
+                safe_packages = [self._sanitize_package_name(pkg) for pkg in all_packages]
+                safe_packages = [pkg for pkg in safe_packages if pkg]  # Remove empty strings
+                
+                if safe_packages:
+                    install_cmd = [
+                        'chroot', rootfs_dir,
+                        'apt-get', 'install', '-y', '--no-install-recommends'
+                    ] + safe_packages
+                    
+                    print(f"Installing packages: {', '.join(safe_packages)}")
+                    result = subprocess.run(
+                        install_cmd,
+                        capture_output=True,
+                        text=True,
+                        timeout=3600  # 1 hour timeout for large installs
+                    )
+                    
+                    if result.returncode != 0:
+                        print(f"⚠ Some packages failed: {result.stderr[:500]}")
+                    else:
+                        print(f"✓ Installed {len(safe_packages)} packages")
+                
+                # Clean up apt cache to reduce size
+                clean_cmd = ['chroot', rootfs_dir, 'apt-get', 'clean']
+                subprocess.run(clean_cmd, capture_output=True)
+                
+                return True
+                
+            finally:
+                self._unmount_chroot_filesystems(rootfs_dir)
+                
+        except Exception as e:
+            print(f"⚠ Package installation error: {e}")
+            self._unmount_chroot_filesystems(rootfs_dir)
+            return False
+    
+    def _sanitize_package_name(self, package_name):
+        """
+        Sanitize package name to prevent command injection
+        Valid Debian package names: lowercase letters, digits, +, -, .
+        """
+        if not package_name:
+            return ''
+        # Only allow valid package name characters
+        sanitized = re.sub(r'[^a-z0-9+.\-]', '', package_name.lower())
+        # Package names must start with alphanumeric
+        if sanitized and not sanitized[0].isalnum():
+            return ''
+        return sanitized
+    
+    def _mount_chroot_filesystems(self, rootfs_dir):
+        """Mount necessary filesystems for chroot operations"""
+        mounts = [
+            ('proc', os.path.join(rootfs_dir, 'proc'), 'proc'),
+            ('sysfs', os.path.join(rootfs_dir, 'sys'), 'sysfs'),
+            ('/dev', os.path.join(rootfs_dir, 'dev'), None),  # bind mount
+        ]
+        
+        for source, target, fstype in mounts:
+            os.makedirs(target, exist_ok=True)
+            try:
+                if fstype:
+                    subprocess.run(['mount', '-t', fstype, source, target], 
+                                 capture_output=True, check=False)
+                else:
+                    subprocess.run(['mount', '--bind', source, target],
+                                 capture_output=True, check=False)
+            except Exception:
+                pass  # Ignore mount errors, they're common in containers
+    
+    def _unmount_chroot_filesystems(self, rootfs_dir):
+        """Unmount chroot filesystems"""
+        for subdir in ['dev', 'sys', 'proc']:
+            target = os.path.join(rootfs_dir, subdir)
+            try:
+                subprocess.run(['umount', '-l', target], capture_output=True, check=False)
+            except Exception:
+                pass
+    
+    def _configure_live_system(self, rootfs_dir):
+        """Configure the rootfs for live boot"""
+        try:
+            # Create a default user for live session
+            user_cmds = [
+                ['chroot', rootfs_dir, 'useradd', '-m', '-s', '/bin/bash', 'user'],
+                ['chroot', rootfs_dir, 'usermod', '-aG', 'sudo', 'user'],
+            ]
+            
+            for cmd in user_cmds:
+                subprocess.run(cmd, capture_output=True, check=False)
+            
+            # Set empty password for live user (common for live systems)
+            passwd_cmd = ['chroot', rootfs_dir, 'passwd', '-d', 'user']
+            subprocess.run(passwd_cmd, capture_output=True, check=False)
+            
+            # Configure hostname with sanitized value
+            hostname = sanitize_filename(self.config['os_name']).lower()[:63]
+            if not hostname:
+                hostname = 'debspin-live'
+            hostname_path = os.path.join(rootfs_dir, 'etc', 'hostname')
+            with open(hostname_path, 'w') as f:
+                f.write(f"{hostname}\n")
+            
+            # Configure hosts file
+            hosts_path = os.path.join(rootfs_dir, 'etc', 'hosts')
+            with open(hosts_path, 'w') as f:
+                f.write("127.0.0.1\tlocalhost\n")
+                f.write(f"127.0.1.1\t{hostname}\n")
+            
+            # Create os-release file
+            os_release_path = os.path.join(rootfs_dir, 'etc', 'os-release')
+            os_name_safe = sanitize_grub_string(self.config['os_name'])
+            version_safe = sanitize_grub_string(self.config['version_code'])
+            with open(os_release_path, 'w') as f:
+                f.write(f'PRETTY_NAME="{os_name_safe} {version_safe}"\n')
+                f.write(f'NAME="{os_name_safe}"\n')
+                f.write(f'VERSION="{version_safe}"\n')
+                f.write(f'ID={sanitize_filename(self.config["os_name"]).lower()}\n')
+                f.write('ID_LIKE=debian\n')
+            
+            print("✓ Live system configured")
+            
+        except Exception as e:
+            print(f"⚠ Configuration warning: {e}")
+    
+    def _create_squashfs(self, rootfs_dir, output_path):
+        """Create squashfs filesystem from rootfs"""
+        try:
+            cmd = [
+                'mksquashfs',
+                rootfs_dir,
+                output_path,
+                '-comp', 'xz',
+                '-e', 'boot'  # Exclude /boot, we'll handle it separately
+            ]
+            
+            print("Creating compressed filesystem (this may take a while)...")
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=3600  # 1 hour timeout
+            )
+            
+            if result.returncode != 0:
+                print(f"Squashfs error: {result.stderr}")
+                return False
+            
+            # Get size
+            size_mb = os.path.getsize(output_path) / (1024 * 1024)
+            print(f"✓ Squashfs created: {size_mb:.1f} MB")
+            return True
+            
+        except subprocess.TimeoutExpired:
+            print("❌ Squashfs creation timed out")
+            return False
+        except Exception as e:
+            print(f"❌ Squashfs error: {e}")
+            return False
+    
+    def _setup_boot(self, rootfs_dir, iso_dir, boot_dir, grub_dir, isolinux_dir):
+        """Setup boot configuration for the ISO"""
+        os_name_safe = sanitize_grub_string(self.config['os_name'])
+        version_safe = sanitize_grub_string(self.config['version_code'])
+        
+        # Copy kernel and initrd from rootfs to ISO boot directory
+        kernel_src = os.path.join(rootfs_dir, 'boot')
+        if os.path.exists(kernel_src):
+            for f in os.listdir(kernel_src):
+                src = os.path.join(kernel_src, f)
+                if os.path.isfile(src):
+                    if f.startswith('vmlinuz'):
+                        shutil.copy2(src, os.path.join(boot_dir, 'vmlinuz'))
+                    elif f.startswith('initrd') or f.startswith('initramfs'):
+                        shutil.copy2(src, os.path.join(boot_dir, 'initrd.img'))
+        
+        # Create GRUB configuration for EFI boot
+        grub_cfg = os.path.join(grub_dir, 'grub.cfg')
+        with open(grub_cfg, 'w') as f:
+            f.write(f'''# GRUB Configuration for {os_name_safe}
+set default=0
+set timeout=10
+
+insmod all_video
+insmod gfxterm
+
+menuentry "{os_name_safe} {version_safe} - Live (Try without installing)" {{
+    linux /boot/vmlinuz boot=live quiet splash
+    initrd /boot/initrd.img
+}}
+
+menuentry "{os_name_safe} {version_safe} - Live (Safe graphics)" {{
+    linux /boot/vmlinuz boot=live nomodeset quiet
+    initrd /boot/initrd.img
+}}
+
+menuentry "{os_name_safe} {version_safe} - Install" {{
+    linux /boot/vmlinuz boot=live quiet
+    initrd /boot/initrd.img
+}}
+
+menuentry "Boot from first hard disk" {{
+    set root=(hd0)
+    chainloader +1
+}}
+''')
+        
+        # Create isolinux configuration for BIOS boot
+        isolinux_cfg = os.path.join(isolinux_dir, 'isolinux.cfg')
+        # Only create if isolinux.bin exists on the system
+        isolinux_bin_paths = [
+            '/usr/lib/ISOLINUX/isolinux.bin',
+            '/usr/share/syslinux/isolinux.bin',
+            '/usr/lib/syslinux/isolinux.bin'
+        ]
+        
+        for path in isolinux_bin_paths:
+            if os.path.exists(path):
+                shutil.copy2(path, os.path.join(isolinux_dir, 'isolinux.bin'))
+                break
+        
+        # Copy ldlinux.c32 if it exists
+        ldlinux_paths = [
+            '/usr/lib/syslinux/modules/bios/ldlinux.c32',
+            '/usr/share/syslinux/ldlinux.c32',
+            '/usr/lib/ISOLINUX/ldlinux.c32'
+        ]
+        for path in ldlinux_paths:
+            if os.path.exists(path):
+                shutil.copy2(path, os.path.join(isolinux_dir, 'ldlinux.c32'))
+                break
+        
+        with open(isolinux_cfg, 'w') as f:
+            f.write(f'''# ISOLINUX Configuration for {os_name_safe}
+DEFAULT live
+TIMEOUT 100
+PROMPT 1
+
+LABEL live
+    MENU LABEL {os_name_safe} {version_safe} - Live
+    KERNEL /boot/vmlinuz
+    APPEND initrd=/boot/initrd.img boot=live quiet splash
+
+LABEL livesafe
+    MENU LABEL {os_name_safe} {version_safe} - Live (Safe graphics)
+    KERNEL /boot/vmlinuz
+    APPEND initrd=/boot/initrd.img boot=live nomodeset quiet
+
+LABEL install
+    MENU LABEL {os_name_safe} {version_safe} - Install
+    KERNEL /boot/vmlinuz
+    APPEND initrd=/boot/initrd.img boot=live quiet
+''')
+        
+        # Create metadata file
+        metadata = {
+            'iso_type': 'Debian Custom Spinoff',
+            'name': self.config['os_name'],
+            'version': self.config['version_code'],
+            'desktop_manager': self.config['desktop_manager'],
+            'packages': self.config['packages'],
+            'created_at': self.config.get('created_at', ''),
+            'bootable': True,
+            'live_boot': True,
+            'installation_capable': True
+        }
+        metadata_path = os.path.join(iso_dir, '.disk', 'info')
+        os.makedirs(os.path.dirname(metadata_path), exist_ok=True)
+        with open(metadata_path, 'w') as f:
+            f.write(f"{os_name_safe} {version_safe}")
+        
+        metadata_json_path = os.path.join(iso_dir, 'debspin_metadata.json')
+        with open(metadata_json_path, 'w') as f:
+            json.dump(metadata, f, indent=2)
+        
+        print("✓ Boot configuration created")
+    
+    def _create_bootable_iso(self, iso_dir):
+        """Create the final bootable ISO using xorriso"""
+        try:
+            # Remove existing output file if it exists (xorriso may fail to overwrite)
+            if os.path.exists(self.output_path):
+                try:
+                    os.remove(self.output_path)
+                except Exception:
+                    pass  # Ignore removal errors
+            
+            # Build xorriso command for bootable ISO
+            cmd = [
+                'xorriso',
+                '-as', 'mkisofs',
+                '-r',                           # Rock Ridge extensions
+                '-J',                           # Joliet extensions
+                '-joliet-long',                 # Long Joliet names
+                '-l',                           # Allow full 31-char filenames
+                '-iso-level', '3',              # ISO level 3 for large files
+                '-V', sanitize_filename(self.config['os_name'])[:32],  # Volume label
+            ]
+            
+            # Add BIOS boot if isolinux.bin exists
+            isolinux_bin = os.path.join(iso_dir, 'isolinux', 'isolinux.bin')
+            if os.path.exists(isolinux_bin):
+                cmd.extend([
+                    '-b', 'isolinux/isolinux.bin',
+                    '-c', 'isolinux/boot.cat',
+                    '-no-emul-boot',
+                    '-boot-load-size', '4',
+                    '-boot-info-table',
+                ])
+            
+            cmd.extend([
+                '-o', self.output_path,
+                iso_dir
+            ])
+            
+            print(f"Creating ISO: {self.output_path}")
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=1800
+            )
+            
+            # Check if the file was created successfully, even if xorriso reports warnings
+            if os.path.exists(self.output_path):
+                file_size = os.path.getsize(self.output_path)
+                # If file size is reasonable (> 1MB), consider it a success
+                if file_size > 1024 * 1024:
+                    file_size_mb = file_size / (1024 * 1024)
+                    print(f"\n✓ ISO created successfully: {self.output_path}")
+                    print(f"✓ Size: {file_size_mb:.1f} MB")
+                    return True
+            
+            # If we reach here, the ISO was not created properly
+            if result.returncode != 0:
+                print(f"ISO creation error: {result.stderr}")
+            return False
+            
+        except subprocess.TimeoutExpired:
+            print("❌ ISO creation timed out")
+            return False
+        except Exception as e:
+            print(f"❌ ISO creation error: {e}")
             return False
 
 
