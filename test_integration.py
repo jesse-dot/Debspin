@@ -48,6 +48,18 @@ def test_iso_creation():
                 "packages": ["gimp", "inkscape", "blender"],
                 "created_at": "2026-01-21T18:00:00"
             }
+        },
+        {
+            "name": "Configuration with Logo and Background",
+            "config": {
+                "os_name": "TestBranded",
+                "version_code": "1.5",
+                "desktop_manager": "GNOME",
+                "packages": ["firefox-esr"],
+                "logo_path": "/tmp/test_logo.png",
+                "background_path": "/tmp/test_bg.jpg",
+                "created_at": "2026-01-21T18:00:00"
+            }
         }
     ]
     

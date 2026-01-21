@@ -60,6 +60,38 @@ class DebspinGUI:
                                        width=40)
         self.version_entry.grid(row=1, column=1, sticky=(tk.W, tk.E), pady=(5, 0))
         
+        # Logo section
+        ttk.Label(os_frame, text="Logo (optional):").grid(row=2, column=0, sticky=tk.W, 
+                                                          padx=(0, 10), pady=(5, 0))
+        logo_inner_frame = ttk.Frame(os_frame)
+        logo_inner_frame.grid(row=2, column=1, sticky=(tk.W, tk.E), pady=(5, 0))
+        logo_inner_frame.columnconfigure(0, weight=1)
+        
+        self.logo_path_var = tk.StringVar(value="")
+        self.logo_entry = ttk.Entry(logo_inner_frame, textvariable=self.logo_path_var, 
+                                    state='readonly')
+        self.logo_entry.grid(row=0, column=0, sticky=(tk.W, tk.E), padx=(0, 5))
+        
+        self.logo_browse_btn = ttk.Button(logo_inner_frame, text="Browse...", 
+                                         command=self.browse_logo)
+        self.logo_browse_btn.grid(row=0, column=1)
+        
+        # Background section
+        ttk.Label(os_frame, text="Background (optional):").grid(row=3, column=0, sticky=tk.W, 
+                                                                padx=(0, 10), pady=(5, 0))
+        bg_inner_frame = ttk.Frame(os_frame)
+        bg_inner_frame.grid(row=3, column=1, sticky=(tk.W, tk.E), pady=(5, 0))
+        bg_inner_frame.columnconfigure(0, weight=1)
+        
+        self.background_path_var = tk.StringVar(value="")
+        self.background_entry = ttk.Entry(bg_inner_frame, textvariable=self.background_path_var, 
+                                         state='readonly')
+        self.background_entry.grid(row=0, column=0, sticky=(tk.W, tk.E), padx=(0, 5))
+        
+        self.background_browse_btn = ttk.Button(bg_inner_frame, text="Browse...", 
+                                               command=self.browse_background)
+        self.background_browse_btn.grid(row=0, column=1)
+        
         # Desktop Manager section
         de_frame = ttk.LabelFrame(main_container, text="Desktop Environment", 
                                   padding="10")
@@ -175,6 +207,37 @@ htop"""
                    if pkg.strip()]
         return packages
     
+    def browse_logo(self):
+        """Browse for logo file"""
+        filepath = filedialog.askopenfilename(
+            title="Select Logo Image",
+            filetypes=[
+                ("Image files", "*.png *.jpg *.jpeg *.svg"),
+                ("PNG files", "*.png"),
+                ("JPEG files", "*.jpg *.jpeg"),
+                ("SVG files", "*.svg"),
+                ("All files", "*.*")
+            ]
+        )
+        if filepath:
+            self.logo_path_var.set(filepath)
+            self.preview_config()
+    
+    def browse_background(self):
+        """Browse for background image file"""
+        filepath = filedialog.askopenfilename(
+            title="Select Background Image",
+            filetypes=[
+                ("Image files", "*.png *.jpg *.jpeg"),
+                ("PNG files", "*.png"),
+                ("JPEG files", "*.jpg *.jpeg"),
+                ("All files", "*.*")
+            ]
+        )
+        if filepath:
+            self.background_path_var.set(filepath)
+            self.preview_config()
+    
     def generate_config(self):
         """Generate the spinoff configuration"""
         config = {
@@ -185,6 +248,17 @@ htop"""
             "created_at": datetime.now().isoformat(),
             "version": "1.0"
         }
+        
+        # Add logo path if specified
+        logo_path = self.logo_path_var.get()
+        if logo_path:
+            config["logo_path"] = logo_path
+        
+        # Add background path if specified
+        background_path = self.background_path_var.get()
+        if background_path:
+            config["background_path"] = background_path
+        
         return config
     
     def preview_config(self):

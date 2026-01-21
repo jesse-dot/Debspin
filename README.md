@@ -6,6 +6,8 @@ Debspin is an easy-to-use GUI application for creating custom Debian-based Linux
 
 - **Custom OS Name**: Specify the name of your custom Debian distribution
 - **Version Code**: Set your own version code for the ISO (e.g., "1.0", "2024.1")
+- **Custom Logo**: Add a custom logo for your Debian spinoff (PNG, JPG, or SVG)
+- **Custom Background**: Set a default custom background wallpaper (PNG or JPG)
 - **Desktop Environment Selection**: Choose from popular desktop managers including:
   - KDE Plasma (default)
   - GNOME
@@ -22,6 +24,7 @@ Debspin is an easy-to-use GUI application for creating custom Debian-based Linux
   - Installation capability (install to hard drive)
   - User-selected desktop environment pre-configured
   - Custom package selection included
+  - Custom branding (logo and background)
 
 ## Requirements
 
@@ -72,10 +75,12 @@ python3 debspin_gui.py
 
 1. **Enter OS Name**: Type the name of your custom Debian distribution (e.g., "MyDebianSpin")
 2. **Enter Version Code**: Specify the version (e.g., "1.0", "2024.1")
-3. **Select Desktop Manager**: Choose from the dropdown menu (defaults to KDE Plasma)
-4. **Add Packages**: Enter package names, one per line, in the text area
-5. **Preview Configuration**: Click "Preview Configuration" to see your settings in JSON format
-6. **Build ISO**: Click "Build ISO" to create your custom Debian ISO file
+3. **Select Logo (optional)**: Click "Browse..." to select a custom logo image (PNG, JPG, or SVG)
+4. **Select Background (optional)**: Click "Browse..." to select a custom background wallpaper (PNG or JPG)
+5. **Select Desktop Manager**: Choose from the dropdown menu (defaults to KDE Plasma)
+6. **Add Packages**: Enter package names, one per line, in the text area
+7. **Preview Configuration**: Click "Preview Configuration" to see your settings in JSON format
+8. **Build ISO**: Click "Build ISO" to create your custom Debian ISO file
 
 The ISO will be named: `{os_name}-{version_code}.iso`
 
@@ -110,6 +115,10 @@ iso/
   "version": "1.0",
   "desktop_manager": "KDE Plasma",
   "packages": ["firefox-esr", "libreoffice", "vlc"],
+  "has_logo": true,
+  "logo_filename": "custom-logo.png",
+  "has_background": true,
+  "background_filename": "custom-background.jpg",
   "bootable": true,
   "live_boot": true,
   "installation_capable": true
