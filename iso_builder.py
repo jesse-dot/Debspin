@@ -572,26 +572,37 @@ ISO metadata: See debspin_metadata.json in the archive
             ('/dev', os.path.join(rootfs_dir, 'dev'), None),  # bind mount
         ]
         
+        mounted = []
         for source, target, fstype in mounts:
             os.makedirs(target, exist_ok=True)
             try:
                 if fstype:
-                    subprocess.run(['mount', '-t', fstype, source, target], 
-                                 capture_output=True, check=False)
+                    result = subprocess.run(['mount', '-t', fstype, source, target], 
+                                 capture_output=True, text=True, check=False)
                 else:
-                    subprocess.run(['mount', '--bind', source, target],
-                                 capture_output=True, check=False)
-            except Exception:
-                pass  # Ignore mount errors, they're common in containers
+                    result = subprocess.run(['mount', '--bind', source, target],
+                                 capture_output=True, text=True, check=False)
+                
+                if result.returncode == 0:
+                    mounted.append(target)
+                else:
+                    # Log mount failure but continue - some environments don't support all mounts
+                    print(f"⚠ Could not mount {source} to {target}: {result.stderr.strip()}")
+            except Exception as e:
+                # Log the error but continue - common in container environments
+                print(f"⚠ Mount error for {target}: {e}")
+        
+        return mounted
     
     def _unmount_chroot_filesystems(self, rootfs_dir):
-        """Unmount chroot filesystems"""
+        """Unmount chroot filesystems in reverse order"""
+        # Unmount in reverse order of mounting to respect dependencies
         for subdir in ['dev', 'sys', 'proc']:
             target = os.path.join(rootfs_dir, subdir)
             try:
                 subprocess.run(['umount', '-l', target], capture_output=True, check=False)
             except Exception:
-                pass
+                pass  # Best effort unmount
     
     def _configure_live_system(self, rootfs_dir):
         """Configure the rootfs for live boot"""
@@ -605,9 +616,20 @@ ISO metadata: See debspin_metadata.json in the archive
             for cmd in user_cmds:
                 subprocess.run(cmd, capture_output=True, check=False)
             
-            # Set empty password for live user (common for live systems)
-            passwd_cmd = ['chroot', rootfs_dir, 'passwd', '-d', 'user']
-            subprocess.run(passwd_cmd, capture_output=True, check=False)
+            # Set default password 'live' for the live user
+            # This is more secure than an empty password while still being convenient
+            # Using chpasswd to set the password
+            passwd_cmd = ['chroot', rootfs_dir, 'chpasswd']
+            subprocess.run(passwd_cmd, input='user:live\n', capture_output=True, 
+                          text=True, check=False)
+            
+            # Configure passwordless sudo for live user (common for live systems)
+            sudoers_dir = os.path.join(rootfs_dir, 'etc', 'sudoers.d')
+            os.makedirs(sudoers_dir, exist_ok=True)
+            sudoers_file = os.path.join(sudoers_dir, 'live-user')
+            with open(sudoers_file, 'w') as f:
+                f.write('user ALL=(ALL) NOPASSWD: ALL\n')
+            os.chmod(sudoers_file, 0o440)
             
             # Configure hostname with sanitized value
             hostname = sanitize_filename(self.config['os_name']).lower()[:63]
