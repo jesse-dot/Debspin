@@ -17,6 +17,7 @@ def test_config_generation():
     # Simulate configuration
     config = {
         "os_name": "TestDebian",
+        "version_code": "1.0",
         "desktop_manager": "KDE Plasma",
         "packages": ["firefox-esr", "libreoffice", "git"],
         "created_at": "2026-01-21T18:13:41.000000",
@@ -39,6 +40,7 @@ def test_config_generation():
     
     # Test required fields
     assert "os_name" in config, "OS name is required"
+    assert "version_code" in config, "Version code is required"
     assert "desktop_manager" in config, "Desktop manager is required"
     assert "packages" in config, "Packages field is required"
     print("✓ All required fields are present")
@@ -47,6 +49,10 @@ def test_config_generation():
     assert isinstance(config["packages"], list), "Packages should be a list"
     assert len(config["packages"]) > 0, "Should have at least one package"
     print("✓ Package list is valid")
+    
+    # Test version code
+    assert config["version_code"] == "1.0", "Version code should be set"
+    print("✓ Version code is present")
     
     print("\n✅ All tests passed!")
     return True

@@ -36,3 +36,10 @@ Thumbs.db
 
 # Configuration outputs
 *_config.json
+
+# ISO build artifacts
+*.iso
+*.tar.gz
+debspin_build_*/
+live-build/
+chroot/
